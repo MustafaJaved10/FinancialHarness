@@ -1,4 +1,4 @@
-"""Market + company data connector — Alpha Vantage (Yasir's data task).
+"""Market and company data from Alpha Vantage and SEC EDGAR.
 
 This is the data layer Mustafa's AI harness calls through the MCP tools in
 ``mcp_server.py``. Only the Python standard library is used (urllib), so the
@@ -22,6 +22,7 @@ API key: environment variable ALPHAVANTAGE_API_KEY. Without one the public
 If the live provider is blocked / rate-limited and a saved copy exists in
 data/samples/<SYMBOL>_*.json, the saved copy is returned and the source
 string says so — the format and the connector stay testable either way.
+Set SEC_CONTACT_EMAIL to try SEC filings first for supported company tickers.
 """
 from __future__ import annotations
 
@@ -30,7 +31,11 @@ import csv
 import os
 import urllib.error
 import urllib.request
+from functools import lru_cache
 from pathlib import Path
+from time import monotonic
+
+from . import sec_data
 
 BASE = "https://www.alphavantage.co/query"
 SAMPLES = Path(__file__).resolve().parent.parent / "data" / "samples"
@@ -198,7 +203,33 @@ def parse_company(symbol: str, income: dict, balance: dict, cashflow: dict,
     }
 
 
-def get_company_data(symbol: str) -> dict:
+@lru_cache(maxsize=16)
+def _valuation_quote(symbol, window):
+    return get_daily_candles(symbol, limit=1)
+
+
+def _sec_company(symbol, contact_email, include_valuation):
+    try:
+        company = sec_data.get_company_data(symbol, contact_email)
+    except (OSError, ValueError):
+        return None
+    if company is None:
+        return None
+
+    valuation = company["valuation"].copy()
+    result = {**company, "valuation": valuation}
+    eps = valuation.get("eps_ttm")
+    if include_valuation and eps and eps > 0:
+        prices = _valuation_quote(symbol, int(monotonic() // 900))
+        candles = prices.get("candles") or []
+        if candles and candles[0].get("close"):
+            valuation["pe_ratio"] = round(candles[0]["close"] / eps, 2)
+            result["valuation_source"] = f"{prices['source']} · closing price on {candles[0]['date']}"
+            result["valuation_date"] = candles[0]["date"]
+    return result
+
+
+def get_company_data(symbol: str, include_valuation: bool = True) -> dict:
     """Latest reported quarter + valuation for one stock code.
 
     Any value the source does not report is returned as None (null) — never guessed.
@@ -206,6 +237,11 @@ def get_company_data(symbol: str) -> dict:
     symbol = symbol.upper().strip()
     if not symbol.isalnum() or len(symbol) > 10:
         return {"error": f"Invalid stock code '{symbol}': use letters only, e.g. IBM, AAPL.", "symbol": symbol}
+    contact_email = os.environ.get("SEC_CONTACT_EMAIL", "").strip()
+    if contact_email and symbol in sec_data.CIKS and os.environ.get("STOCK_DATA_MODE") != "saved":
+        company = _sec_company(symbol, contact_email, include_valuation)
+        if company is not None:
+            return company
     source = ("Alpha Vantage — INCOME_STATEMENT / BALANCE_SHEET / CASH_FLOW / "
               "EARNINGS / OVERVIEW")
     kinds = {"income": "INCOME_STATEMENT", "balance": "BALANCE_SHEET",

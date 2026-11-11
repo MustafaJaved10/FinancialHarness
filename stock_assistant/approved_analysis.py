@@ -48,12 +48,20 @@ def fundamental(data):
     }
     metrics = {**data["quarterly"], **data["valuation"]}
     period = data.get("reporting_period") or "Unknown period"
+    sources = [data["source"]]
+    assumptions = ["Amounts use the reported currency. Valuation ratios are shown separately from reported earnings."]
+    if data.get("valuation_source"):
+        sources.append(data["valuation_source"])
+        assumptions.append("Trailing P/E uses the listed closing price and estimated trailing diluted earnings per share.")
+    suffix = ", with available valuation figures" if any(
+        data["valuation"].get(key) is not None for key in ("market_cap", "pe_ratio", "forward_pe", "price_to_book")
+    ) else ""
     return response(
-        "fundamental", f"Here are {data['symbol']}'s reported financials for the period ending {period}, with available valuation figures.",
-        [data["source"]], ["Amounts use the reported currency. Valuation ratios are shown separately from reported earnings."],
+        "fundamental", f"Here are {data['symbol']}'s reported financials for the period ending {period}{suffix}.",
+        sources, assumptions,
         table={"columns": ["Metric", "Value", "Unit", "Period"], "rows": [
             [label, metrics[key], ("ratio" if key in {"pe_ratio", "forward_pe", "price_to_book"} else data.get("currency")),
-             (period if key in data["quarterly"] else "Provider snapshot")]
+             (period if key in data["quarterly"] else data.get("valuation_date") or "Provider snapshot")]
             for key, label in names.items() if metrics.get(key) is not None
         ]},
     )

@@ -31,8 +31,8 @@ def get_daily_candles(symbol: str, limit: int = 100) -> dict:
 
 
 @mcp.tool()
-def get_company_data(symbol: str) -> dict:
-    """Real reported quarterly company data + valuation (Alpha Vantage).
+def get_company_data(symbol: str, include_valuation: bool = True) -> dict:
+    """Reported quarterly company data and optional valuation from available providers.
 
     Input: a stock code, e.g. "IBM". Output keys: symbol, company_name,
     source, reporting_period, period_label, currency,
@@ -40,7 +40,7 @@ def get_company_data(symbol: str) -> dict:
     valuation{market_cap, pe_ratio, price_to_book, ...}.
     Values the source does not report are null, never invented.
     """
-    return market_data.get_company_data(symbol)
+    return market_data.get_company_data(symbol, include_valuation=include_valuation)
 
 
 @mcp.tool()
