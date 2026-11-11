@@ -49,8 +49,11 @@ async def prepare(question, previous_symbol="IBM"):
             call_tool("get_daily_candles", {"symbol": ticker, "limit": 100}) for ticker in symbols
         ))
         return "compare", {"series": candles}
-    if any(word in text for word in ("company", "fundamental", "earnings", "financial", "valuation", "revenue", "profit", "eps", "balance sheet", "cash flow")):
-        return "fundamental", {"data": await call_tool("get_company_data", {"symbol": symbol})}
+    valuation = any(word in text for word in ("valuation", "p/e", "price-to-earnings"))
+    if valuation or any(word in text for word in ("company", "fundamental", "earnings", "financial", "revenue", "profit", "eps", "balance sheet", "cash flow")):
+        return "fundamental", {"data": await call_tool("get_company_data", {
+            "symbol": symbol, "include_valuation": valuation,
+        })}
     series = await call_tool("get_daily_candles", {"symbol": symbol, "limit": 100})
     if any(word in text for word in ("project", "future", "forecast")) or re.search(r"\byears?\b", text):
         years = re.search(r"\b(\d+)\s+years?\b", text)
