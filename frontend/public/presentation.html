@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Financial Harness · Presentation</title>
+<style>
+:root{font:clamp(16px,2.3vw,26px)/1.45 system-ui,sans-serif;color:#eaf2ff;background:#15263b}
+body{margin:0}main{max-width:38rem;margin:auto;padding:2rem 1.2rem}
+section{min-height:64vh;align-content:center}h1,h2{line-height:1.13;margin:0 0 .7rem}h1{font-size:2.65rem}h2{font-size:2rem}
+p,li{max-width:30em}li{margin:.35rem 0}footer{display:flex;align-items:center;justify-content:space-between;gap:12px}
+button,a{font:inherit;color:#eaf2ff}button{background:#253f60;border:1px solid #89a8cc;border-radius:8px;padding:.35rem .7rem}button:disabled{opacity:.4}
+</style>
+<main>
+<section><h1>Financial Harness</h1><p>Stock prices, company reports and calculations in one chat.</p><p>Every result can show where the data came from and which assumptions were used.</p></section>
+<section hidden><h2>What users can ask</h2><ul><li>How did IBM’s price and trading volume move?</li><li>What did IBM report for earnings and valuation?</li><li>How did two stocks compare on the same dates?</li><li>What happens to a position if the price changes?</li></ul></section>
+<section hidden><h2>From question to answer</h2><p>React sends the question to FastAPI. Celery picks it up from Redis and fetches stock data through MCP tools.</p><p>The Python sandbox calculates the answer. Redis saves it so the browser can retrieve it by job ID.</p></section>
+<section hidden><h2>Demo</h2><ol><li>Ask for IBM’s price and volume. Hover over a candle.</li><li>Ask for earnings and valuation. Point out the reporting period and source.</li><li>Ask what happens if $1,000 drops 10%. Show the progress and $900 result.</li></ol><p><a href="/">Open the assistant</a></p></section>
+<footer><button id="previous" type="button">Previous</button><span id="position" aria-live="polite"></span><button id="next" type="button">Next</button></footer>
+</main>
+<script>
+const slides = [...document.querySelectorAll('section')]
+const previous = document.getElementById('previous')
+const next = document.getElementById('next')
+const position = document.getElementById('position')
+let index = 0
+function show(value) {
+  index = Math.min(Math.max(value, 0), slides.length - 1)
+  slides.forEach((slide, i) => { slide.hidden = i !== index })
+  previous.disabled = index === 0
+  next.disabled = index === slides.length - 1
+  position.textContent = `${index + 1} / ${slides.length}`
+}
+previous.addEventListener('click', () => show(index - 1))
+next.addEventListener('click', () => show(index + 1))
+document.addEventListener('keydown', event => {
+  if (event.key === 'ArrowLeft') show(index - 1)
+  if (event.key === 'ArrowRight') show(index + 1)
+})
+show(0)
+</script>

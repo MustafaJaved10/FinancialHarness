@@ -26,6 +26,7 @@ string says so — the format and the connector stay testable either way.
 from __future__ import annotations
 
 import json
+import csv
 import os
 import urllib.error
 import urllib.request
@@ -41,6 +42,8 @@ def _api_key() -> str:
 
 
 def _fetch(function: str, symbol: str) -> dict:
+    if os.environ.get("STOCK_DATA_MODE") == "saved":
+        raise urllib.error.URLError("Using saved data")
     url = f"{BASE}?function={function}&symbol={symbol}&apikey={_api_key()}"
     with urllib.request.urlopen(url, timeout=TIMEOUT) as resp:
         return json.load(resp)
@@ -124,6 +127,19 @@ def get_daily_candles(symbol: str, limit: int = 100) -> dict:
         result = parse_daily(saved, symbol, source + " (saved copy — live provider unavailable)")
         result["candles"] = result["candles"][:limit]
         return result
+    training_path = SAMPLES.parent / "training" / f"{symbol}_daily_5y.csv"
+    if training_path.is_file():
+        with training_path.open(newline="", encoding="utf-8-sig") as handle:
+            rows = list(csv.DictReader(handle))[-limit:]
+        candles = [
+            {"date": row["Date"][:10], **{key.lower(): _num(row[key]) for key in (
+                "Open", "High", "Low", "Close", "Volume"
+            )}}
+            for row in reversed(rows)
+        ]
+        if candles:
+            return {"symbol": symbol, "source": "Yahoo Finance (saved training data)",
+                    "latest_date": candles[0]["date"], "candles": candles}
     if payload is not None and _provider_error(payload) == "demo_key":
         return {"error": DEMO_KEY_MSG, "symbol": symbol}
     if payload is not None and _provider_error(payload) == "provider_limit":
