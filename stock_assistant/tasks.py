@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 
 from . import harness, projections
+from .integration import answer_question
 
 RESULTS_DIR = Path(__file__).resolve().parent.parent / "results"
 RESULTS_DIR.mkdir(exist_ok=True)
@@ -24,9 +25,10 @@ BROKER = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")
 try:
     from celery import Celery
 
-    celery_app = Celery("stock_assistant", broker=BROKER, backend=BROKER)
+    celery_app = Celery("stock_assistant", broker=BROKER,
+                        backend=os.environ.get("CELERY_RESULT_BACKEND", BROKER))
     celery_app.conf.update(task_track_started=True, task_time_limit=600,
-                           worker_prefetch_multiplier=1)
+                           worker_prefetch_multiplier=1, result_expires=86400)
 except Exception:  # celery not installed in this environment
     celery_app = None
 
@@ -54,6 +56,14 @@ def _save(task_id: str, payload: dict) -> Path:
 
 
 if celery_app is not None:
+    @celery_app.task(bind=True, autoretry_for=(OSError,), retry_backoff=True, max_retries=2,
+                     time_limit=180, name="chat_analysis")
+    def chat_analysis_task(self, question, symbol="IBM"):
+        def progress(percent, note):
+            self.update_state(state="PROGRESS", meta={"progress": percent, "note": note})
+
+        return answer_question(question, symbol, progress)
+
     @celery_app.task(bind=True, max_retries=3, default_retry_delay=10, name="deep_analysis")
     def deep_analysis_task(self, symbols: list[str]):
         def _progress(pct, note):

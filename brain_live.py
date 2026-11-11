@@ -22,15 +22,22 @@ import json
 import sys
 
 sys.path.insert(0, ".")
-from stock_assistant.mcp_server import mcp
 
 
 # ---------- MCP tool calling (the harness's hands) ----------
 
 async def call_tool(name, args):
     """Call one of Yasir's MCP tools and return its answer as a Python dict."""
-    r = await mcp.call_tool(name, args)
-    return json.loads(r[0].text)
+    from stock_assistant.mcp_server import mcp
+
+    result = await mcp.call_tool(name, args)
+    if isinstance(result, tuple):
+        content, structured = result
+        if isinstance(structured, dict):
+            return structured
+    else:
+        content = result
+    return json.loads(content[0].text)
 
 
 # ---------- The brain (Steps 2-4: rules unchanged) ----------
@@ -61,10 +68,10 @@ def rsi(prices):
     last14 = changes[-14:]
     gains = [c for c in last14 if c > 0]
     losses = [-c for c in last14 if c < 0]
-    avg_gain = average(gains) if gains else 0
-    avg_loss = average(losses) if losses else 0
+    avg_gain = sum(gains) / len(last14)
+    avg_loss = sum(losses) / len(last14)
     if avg_loss == 0:
-        return 100.0
+        return 100.0 if avg_gain else 50.0
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
